@@ -1,4 +1,5 @@
 from ._version import __version__, __version_info__
+from .artifact_cleanup import Gitlab
 
 __author__ = "Ingo Meyer"
 __email__ = "i.meyer@fz-juelich.de"
@@ -6,6 +7,7 @@ __copyright__ = "Copyright © 2025 Forschungszentrum Jülich GmbH. All rights re
 __license__ = "MIT"
 
 __all__ = (
+    "Gitlab",
     "__author__",
     "__copyright__",
     "__email__",
