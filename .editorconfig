@@ -30,3 +30,7 @@ indent_size = 2
 # See <https://www.git-scm.com/book/en/v2/Distributed-Git-Contributing-to-a-Project#_commit_guidelines> for a reference
 [COMMIT_EDITMSG]
 max_line_length = 72
+
+# `uv.lock` is a generated file, so don't enforce a line length limit
+[uv.lock]
+max_line_length = unset
