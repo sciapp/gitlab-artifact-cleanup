@@ -3,12 +3,16 @@ from datetime import datetime, timedelta, timezone
 from typing import Iterable, Optional, Union
 
 from gitlab import Gitlab as _Gitlab
-from gitlab.exceptions import GitlabJobEraseError
+from gitlab.exceptions import GitlabGetError, GitlabJobEraseError
 from gitlab.v4.objects import ProjectJob as GitlabProjectJob
 
 from .util import human_size
 
 logger = logging.getLogger(__name__)
+
+
+class ProjectGetError(Exception):
+    pass
 
 
 class Gitlab:
@@ -34,7 +38,10 @@ class Gitlab:
         repository_count = 0
 
         for repository_path in repository_paths_with_namespace:
-            project = self._gitlab.projects.get(repository_path)
+            try:
+                project = self._gitlab.projects.get(repository_path)
+            except GitlabGetError as e:
+                raise ProjectGetError(f'Could not get project "{repository_path}": {e}') from e
             logger.info('Scanning project "%s"...', project.path_with_namespace)
             branches_to_hash = {branch.name: branch.commit["id"] for branch in project.branches.list(iterator=True)}
             tags_to_hash = {tag.name: tag.commit["id"] for tag in project.tags.list(iterator=True)}

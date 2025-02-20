@@ -10,7 +10,7 @@ from gitlab.exceptions import GitlabAuthenticationError, GitlabListError
 from yacl import setup_colored_exceptions, setup_colored_stderr_logging
 
 from . import __version__
-from .artifact_cleanup import Gitlab
+from .artifact_cleanup import Gitlab, ProjectGetError
 from .config import CONFIG_FILEPATH, KEEP_ARTIFACTS_CHOICES, Config, KeepArtifacts, Verbosity, config
 
 logger = logging.getLogger(__name__)
@@ -230,6 +230,7 @@ def main() -> None:
         argparse.ArgumentError,
         GitlabAuthenticationError,
         GitlabListError,
+        ProjectGetError,
     )
     try:
         args = parse_arguments()
