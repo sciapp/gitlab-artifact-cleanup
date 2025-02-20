@@ -1,6 +1,6 @@
 import logging
 from datetime import datetime, timedelta, timezone
-from typing import Optional
+from typing import Iterable, Optional, Union
 
 from gitlab import Gitlab as _Gitlab
 from gitlab.v4.objects import ProjectJob as GitlabProjectJob
@@ -17,96 +17,122 @@ class Gitlab:
 
     def delete_old_artifacts(
         self,
-        repository_path_with_namespace: str,
+        repository_paths_with_namespace: Union[str, Iterable[str]],
         days_to_keep: int,
         keep_artifacts_of_latest_branch_commit: bool = True,
         keep_artifacts_of_tags: bool = True,
         delete_logs: bool = False,
     ) -> None:
+
         keep_timedelta = timedelta(days=days_to_keep)
         now = datetime.now(timezone.utc)
-        project = self._gitlab.projects.get(repository_path_with_namespace)
-        logger.info('Scanning project "%s"...', project.path_with_namespace)
-        branches_to_hash = {branch.name: branch.commit["id"] for branch in project.branches.list(iterator=True)}
-        tags_to_hash = {tag.name: tag.commit["id"] for tag in project.tags.list(iterator=True)}
-
+        if isinstance(repository_paths_with_namespace, str):
+            repository_paths_with_namespace = [repository_paths_with_namespace]
         artifacts_size_total = 0
-        cleaned_job_count = 0
-        for job in project.jobs.list(iterator=True):
-            job_branch = (
-                job.ref if job.commit is not None and job.commit["id"] == branches_to_hash.get(job.ref) else None
-            )
-            job_tag = job.ref if job.commit is not None and job.commit["id"] == tags_to_hash.get(job.ref) else None
-            if (
-                job._attrs["artifacts"] is None
-                or (
-                    not delete_logs
-                    and not any(artifact["file_type"] == "archive" for artifact in job._attrs["artifacts"])
+        cleaned_job_count_total = 0
+        repository_count = 0
+
+        for repository_path in repository_paths_with_namespace:
+            project = self._gitlab.projects.get(repository_path)
+            logger.info('Scanning project "%s"...', project.path_with_namespace)
+            branches_to_hash = {branch.name: branch.commit["id"] for branch in project.branches.list(iterator=True)}
+            tags_to_hash = {tag.name: tag.commit["id"] for tag in project.tags.list(iterator=True)}
+
+            artifacts_size_project = 0
+            cleaned_job_count_project = 0
+            for job in project.jobs.list(iterator=True):
+                job_branch = (
+                    job.ref if job.commit is not None and job.commit["id"] == branches_to_hash.get(job.ref) else None
                 )
-                or (keep_artifacts_of_latest_branch_commit and job_branch is not None)
-                or (keep_artifacts_of_tags and job_tag is not None)
-                or (now - datetime.fromisoformat(job.created_at) <= keep_timedelta)
-            ):
-                continue
+                job_tag = job.ref if job.commit is not None and job.commit["id"] == tags_to_hash.get(job.ref) else None
+                if (
+                    job._attrs["artifacts"] is None
+                    or (
+                        not delete_logs
+                        and not any(artifact["file_type"] == "archive" for artifact in job._attrs["artifacts"])
+                    )
+                    or (keep_artifacts_of_latest_branch_commit and job_branch is not None)
+                    or (keep_artifacts_of_tags and job_tag is not None)
+                    or (now - datetime.fromisoformat(job.created_at) <= keep_timedelta)
+                ):
+                    continue
 
-            artifacts_size = sum(
-                artifact["size"] if artifact["size"] is not None else 0
-                for artifact in job._attrs["artifacts"]
-                if delete_logs or artifact["file_type"] == "archive"
-            )
-            job_created_at_localtime = datetime.fromisoformat(job.created_at).astimezone().strftime("%Y-%m-%d %H:%M:%S")
-
-            def job_description(
-                job: GitlabProjectJob,
-                job_created_at_localtime: str,
-                artifacts_size: int,
-                job_branch: Optional[str],
-                job_tag: Optional[str],
-            ) -> str:
-                description = (
-                    f'job "{job.id}", created at "{job_created_at_localtime}", size "{human_size(artifacts_size)}"'
+                artifacts_size = sum(
+                    artifact["size"] if artifact["size"] is not None else 0
+                    for artifact in job._attrs["artifacts"]
+                    if delete_logs or artifact["file_type"] == "archive"
                 )
-                if job_branch is not None and job_tag is not None:
-                    description += f', linked to branch "{job_branch}" and tag "{job_tag}"'
-                elif job_branch is not None:
-                    description += f', linked to branch "{job_branch}"'
-                elif job_tag is not None:
-                    description += f', linked to tag "{job_tag}"'
-                else:
-                    description += ", dangling"
-                return description
+                job_created_at_localtime = (
+                    datetime.fromisoformat(job.created_at).astimezone().strftime("%Y-%m-%d %H:%M:%S")
+                )
 
-            if delete_logs:
-                if not self._dry_run:
-                    job.erase()
-                    logger.info(
-                        "Deleted artifacts and log of "
-                        + job_description(job, job_created_at_localtime, artifacts_size, job_branch, job_tag)
+                def job_description(
+                    job: GitlabProjectJob,
+                    job_created_at_localtime: str,
+                    artifacts_size: int,
+                    job_branch: Optional[str],
+                    job_tag: Optional[str],
+                ) -> str:
+                    description = (
+                        f'job "{job.id}", created at "{job_created_at_localtime}", size "{human_size(artifacts_size)}"'
                     )
+                    if job_branch is not None and job_tag is not None:
+                        description += f', linked to branch "{job_branch}" and tag "{job_tag}"'
+                    elif job_branch is not None:
+                        description += f', linked to branch "{job_branch}"'
+                    elif job_tag is not None:
+                        description += f', linked to tag "{job_tag}"'
+                    else:
+                        description += ", dangling"
+                    return description
+
+                if delete_logs:
+                    if not self._dry_run:
+                        job.erase()
+                        logger.info(
+                            "Deleted artifacts and log of "
+                            + job_description(job, job_created_at_localtime, artifacts_size, job_branch, job_tag)
+                        )
+                    else:
+                        logger.info(
+                            "Would delete artifacts and log of "
+                            + job_description(job, job_created_at_localtime, artifacts_size, job_branch, job_tag)
+                        )
                 else:
-                    logger.info(
-                        "Would delete artifacts and log of "
-                        + job_description(job, job_created_at_localtime, artifacts_size, job_branch, job_tag)
-                    )
+                    if not self._dry_run:
+                        job.delete_artifacts()
+                        logger.info(
+                            "Deleted artifacts of "
+                            + job_description(job, job_created_at_localtime, artifacts_size, job_branch, job_tag)
+                        )
+                    else:
+                        logger.info(
+                            "Would delete artifacts of "
+                            + job_description(job, job_created_at_localtime, artifacts_size, job_branch, job_tag)
+                        )
+                cleaned_job_count_project += 1
+                artifacts_size_project += artifacts_size
+            cleaned_job_count_total += cleaned_job_count_project
+            artifacts_size_total += artifacts_size_project
+            repository_count += 1
+            if cleaned_job_count_project > 0:
+                logger.info(
+                    'Found "%d" old dangling jobs, with "%s" of attached artifacts in total in project "%s".',
+                    cleaned_job_count_project,
+                    human_size(artifacts_size_project),
+                    project.path_with_namespace,
+                )
             else:
-                if not self._dry_run:
-                    job.delete_artifacts()
-                    logger.info(
-                        "Deleted artifacts of "
-                        + job_description(job, job_created_at_localtime, artifacts_size, job_branch, job_tag)
-                    )
-                else:
-                    logger.info(
-                        "Would delete artifacts of "
-                        + job_description(job, job_created_at_localtime, artifacts_size, job_branch, job_tag)
-                    )
-            cleaned_job_count += 1
-            artifacts_size_total += artifacts_size
-        if cleaned_job_count > 0:
-            logger.info(
-                'Found "%d" old dangling jobs, with "%s" of attached artifacts in total.',
-                cleaned_job_count,
-                human_size(artifacts_size_total),
-            )
-        else:
-            logger.info("Found no old dangling jobs with attached artifacts.")
+                logger.info(
+                    'Found no old dangling jobs with attached artifacts in project "%s".', project.path_with_namespace
+                )
+
+        if repository_count > 1:
+            if cleaned_job_count_total > 0:
+                logger.info(
+                    'Found "%d" old dangling jobs, with "%s" of attached artifacts in total.',
+                    cleaned_job_count_total,
+                    human_size(artifacts_size_total),
+                )
+            else:
+                logger.info("Found no old dangling jobs with attached artifacts in any project.")

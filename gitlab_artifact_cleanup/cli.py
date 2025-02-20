@@ -54,10 +54,14 @@ def get_argumentparser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
-        "repository_path",
+        "repository_paths",
         action="store",
-        nargs="?",
-        help='the path to the repository to clean up (for example: "examples/ci-docker-in-docker")',
+        nargs="*",
+        default=config.repository_paths,
+        help=(
+            'the paths to the repositories to clean up (for example: "examples/ci-docker-in-docker", '
+            f'default: "{config.repository_paths}")'
+        ),
     )
     parser.add_argument(
         "-a",
@@ -171,7 +175,7 @@ def parse_arguments() -> argparse.Namespace:
     if args.write_default_config:
         return args
 
-    if args.repository_path is None:
+    if not args.repository_paths:
         raise argparse.ArgumentError(None, "No repository path is given.")
 
     if args.days_to_keep < 0:
@@ -209,7 +213,7 @@ def setup_stderr_logging(verbosity_level: Verbosity) -> None:
 def handle_clean_artifacts(args: argparse.Namespace) -> None:
     gitlab = Gitlab(args.gitlab_url, args.gitlab_access_token, args.dry_run)
     gitlab.delete_old_artifacts(
-        args.repository_path,
+        args.repository_paths,
         days_to_keep=args.days_to_keep,
         keep_artifacts_of_latest_branch_commit=(
             args.always_keep in (KeepArtifacts.BRANCH_AND_TAG_ARTIFACTS, KeepArtifacts.BRANCH_ARTIFACTS)

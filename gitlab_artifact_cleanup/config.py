@@ -45,6 +45,7 @@ class Config:
             "access_token": f"{' REPLACE OR DELETE ME! ':x^40}",
         },
         "cleanup": {
+            "repository_paths": "",
             "always_keep": "branch_and_tag_artifacts",
             "days_to_keep": 7,
             "delete_logs": False,
@@ -122,6 +123,14 @@ class Config:
         if not access_token or access_token == self._default_config["gitlab"]["access_token"]:
             return None
         return access_token
+
+    @property
+    def repository_paths(self) -> Optional[list[str]]:
+        repository_paths_string = self._config["cleanup"].get(
+            "repository_paths", fallback=self._default_config["cleanup"]["repository_paths"]
+        )
+        repository_paths = repository_paths_string.split() if repository_paths_string else None
+        return repository_paths
 
     @property
     def verbosity(self) -> Verbosity:
