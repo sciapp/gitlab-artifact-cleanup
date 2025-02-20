@@ -3,6 +3,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Iterable, Optional, Union
 
 from gitlab import Gitlab as _Gitlab
+from gitlab.exceptions import GitlabJobEraseError
 from gitlab.v4.objects import ProjectJob as GitlabProjectJob
 
 from .util import human_size
@@ -88,11 +89,19 @@ class Gitlab:
 
                 if delete_logs:
                     if not self._dry_run:
-                        job.erase()
-                        logger.info(
-                            "Deleted artifacts and log of "
-                            + job_description(job, job_created_at_localtime, artifacts_size, job_branch, job_tag)
-                        )
+                        try:
+                            job.erase()
+                            logger.info(
+                                "Deleted artifacts and log of "
+                                + job_description(job, job_created_at_localtime, artifacts_size, job_branch, job_tag)
+                            )
+                        except GitlabJobEraseError as e:
+                            logger.debug(
+                                "Already erased "
+                                + job_description(job, job_created_at_localtime, artifacts_size, job_branch, job_tag)
+                                + f' (got "{e}")'
+                            )
+                            continue
                     else:
                         logger.info(
                             "Would delete artifacts and log of "
