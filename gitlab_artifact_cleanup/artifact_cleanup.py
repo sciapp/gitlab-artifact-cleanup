@@ -1,3 +1,5 @@
+"""A module to delete old artifacts from GitLab CI/CD jobs."""
+
 import logging
 from datetime import datetime, timedelta, timezone
 from typing import Iterable, Optional, Union
@@ -12,11 +14,20 @@ logger = logging.getLogger(__name__)
 
 
 class ProjectGetError(Exception):
-    pass
+    """An error which is raised if a GitLab project could not be found."""
 
 
 class Gitlab:
+    """Manage the access to a GitLab server and provide methods that can be executed on it."""
+
     def __init__(self, gitlab_url: str, access_token: str, dry_run: bool = False):
+        """
+        Initialize the GitLab connection.
+
+        :param gitlab_url: The url to git GitLab server
+        :param access_token: An access token for API usage, must be generated in the account settings
+        :param dry_run: If activated, only print what would be altered/deleted, defaults to False
+        """
         self._gitlab = _Gitlab(gitlab_url, private_token=access_token)
         self._dry_run = dry_run
 
@@ -28,7 +39,18 @@ class Gitlab:
         keep_artifacts_of_tags: bool = True,
         delete_logs: bool = False,
     ) -> None:
+        """
+        Delete old artifacts from GitLab CI/CD jobs.
 
+        :param repository_paths_with_namespace: The repositories to scan for old artifacts
+        :param days_to_keep: Only delete artifacts older than this
+        :param keep_artifacts_of_latest_branch_commit:
+            Always keep artifacts which belong to the latest commit of a branch, defaults to True
+        :param keep_artifacts_of_tags: Always keep artifacts which belong to a tag, defaults to True
+        :param delete_logs:
+            Do not only delete artifacts but also the logs, effectively purging the job, defaults to False
+        :raises ProjectGetError: Is raised if not project can be found for a give repository path
+        """
         keep_timedelta = timedelta(days=days_to_keep)
         now = datetime.now(timezone.utc)
         if isinstance(repository_paths_with_namespace, str):

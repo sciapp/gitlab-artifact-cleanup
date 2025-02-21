@@ -1,3 +1,5 @@
+"""A command line interface module to delete old artifacts from GitLab CI/CD jobs."""
+
 import argparse
 import getpass
 import logging
@@ -17,12 +19,31 @@ logger = logging.getLogger(__name__)
 
 
 def get_argumentparser() -> argparse.ArgumentParser:
+    """
+    Get the argument parser of the command line interface.
+
+    :return: The argument parser
+    """
+
     def add_bool_argument(
         parser: argparse.ArgumentParser,
         short_name: Optional[str],
         long_name: str,
         help: str,
     ) -> None:
+        """
+        Add a boolean flag to the argument parser.
+
+        This function adds two mutually exclusive flags to the argument parser to activate or deactivate a boolean
+        option. The name for the activating flag is directly taken from `short_name` and `long_name`. The short
+        deactivating flag is the capitalized version of `short_name`. The long name of the deactivating flag is
+        `long_name` with a `no-` prefix.
+
+        :param parser: The argument parser to add the flag to
+        :param short_name: An optional short name for the bool flag
+        :param long_name: A long name for the bool flag
+        :param help: The help message associated with the bool flag
+        """
         normalized_long_name = long_name.replace("-", "_")
         group = parser.add_mutually_exclusive_group()
         flag_names = ["--" + long_name]
@@ -153,6 +174,12 @@ def get_argumentparser() -> argparse.ArgumentParser:
 
 
 def parse_arguments() -> argparse.Namespace:
+    """
+    Parse the command line arguments.
+
+    :return: The parsed command line arguments
+    :raises argparse.ArgumentError: Can raise an ArgumentError if the command line arguments are invalid
+    """
     parser = get_argumentparser()
     args = parser.parse_args()
 
@@ -196,6 +223,12 @@ def parse_arguments() -> argparse.Namespace:
 
 
 def setup_stderr_logging(verbosity_level: Verbosity) -> None:
+    """
+    Set up the logging for stderr depending on the chose verbosity level.
+
+    :param verbosity_level: The verbosity level to use for the logger. Quiet disables the output handlers completely.
+    :raises NotImplementedError: Raises if the verbosity level is not implemented (internal error)
+    """
     if verbosity_level is Verbosity.QUIET:
         logging.getLogger().handlers = []
     elif verbosity_level is Verbosity.WARN:
@@ -211,6 +244,11 @@ def setup_stderr_logging(verbosity_level: Verbosity) -> None:
 
 
 def handle_clean_artifacts(args: argparse.Namespace) -> None:
+    """
+    Connect to a GitLab server and delete old artifacts according to the passed command line arguments and the config.
+
+    :param args: The arguments parsed from the command line and the configuration file
+    """
     gitlab = Gitlab(args.gitlab_url, args.gitlab_access_token, args.dry_run)
     gitlab.delete_old_artifacts(
         args.repository_paths,
@@ -226,6 +264,7 @@ def handle_clean_artifacts(args: argparse.Namespace) -> None:
 
 
 def main() -> None:
+    """Run the main entry point of the command line interface."""
     expected_exceptions = (
         argparse.ArgumentError,
         GitlabAuthenticationError,

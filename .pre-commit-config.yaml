@@ -104,6 +104,10 @@ repos:
       '--max-line-length=120',
       '--ignore=E203,W503',  # Otherwise, `flake8` is not compatible with `black`
     ]
+    additional_dependencies: [
+      'flake8-docstrings',
+      'flake8-rst-docstrings',
+    ]
 - repo: https://github.com/pre-commit/mirrors-mypy
   rev: v1.15.0
   hooks:

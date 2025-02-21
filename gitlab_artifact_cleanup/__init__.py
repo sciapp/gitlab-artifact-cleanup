@@ -1,3 +1,5 @@
+"""The package init module makes convenience imports available for API users."""
+
 from ._version import __version__, __version_info__
 from .artifact_cleanup import Gitlab
 
