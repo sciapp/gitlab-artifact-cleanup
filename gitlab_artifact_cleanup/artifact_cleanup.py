@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Iterable, Optional, Union
 
 from gitlab import Gitlab as _Gitlab
-from gitlab.exceptions import GitlabGetError, GitlabJobEraseError
+from gitlab.exceptions import GitlabGetError
 from gitlab.v4.objects import ProjectJob as GitlabProjectJob
 
 from .util import human_size
@@ -76,7 +76,7 @@ class Gitlab:
                 )
                 job_tag = job.ref if job.commit is not None and job.commit["id"] == tags_to_hash.get(job.ref) else None
                 if (
-                    job._attrs["artifacts"] is None
+                    not job._attrs["artifacts"]
                     or (
                         not delete_logs
                         and not any(artifact["file_type"] == "archive" for artifact in job._attrs["artifacts"])
@@ -118,19 +118,11 @@ class Gitlab:
 
                 if delete_logs:
                     if not self._dry_run:
-                        try:
-                            job.erase()
-                            logger.info(
-                                "Deleted artifacts and log of "
-                                + job_description(job, job_created_at_localtime, artifacts_size, job_branch, job_tag)
-                            )
-                        except GitlabJobEraseError as e:
-                            logger.debug(
-                                "Already erased "
-                                + job_description(job, job_created_at_localtime, artifacts_size, job_branch, job_tag)
-                                + f' (got "{e}")'
-                            )
-                            continue
+                        job.erase()
+                        logger.info(
+                            "Deleted artifacts and log of "
+                            + job_description(job, job_created_at_localtime, artifacts_size, job_branch, job_tag)
+                        )
                     else:
                         logger.info(
                             "Would delete artifacts and log of "
