@@ -1,0 +1,98 @@
+stages:
+- check
+- deploy
+- deploy-to-aur
+
+pre-commit:
+  stage: check
+  image: python:3
+  variables:
+    GIT_CLONE_PATH: "${CI_BUILDS_DIR}/${CI_PROJECT_NAME}"
+    PIP_CACHE_DIR: "${CI_PROJECT_DIR}/.cache/pip"
+    PRE_COMMIT_HOME: "${CI_PROJECT_DIR}/.cache/pre-commit"
+  cache:
+    key: pre-commit
+    paths:
+    - .cache
+  before_script:
+  - pip install "pre-commit==4.1.0"
+  script:
+  - TMP_MSG_FILE="$(mktemp)"
+  - git log -1 --pretty=%B > "${TMP_MSG_FILE}"
+  - pre-commit run
+      --all-files
+      --color=always
+      --show-diff-on-failure
+      --hook-stage pre-commit &&
+    pre-commit run
+      --all-files
+      --color=always
+      --show-diff-on-failure
+      --hook-stage commit-msg
+      --commit-msg-filename "${TMP_MSG_FILE}" &&
+    pre-commit run
+      --all-files
+      --color=always
+      --show-diff-on-failure
+      --hook-stage post-commit ||
+    {
+      >&2 echo "pre-commit checks failed. Please consider installing pre-commit";
+      >&2 echo "hooks in your local Git clone by running \`make git-hooks-install\`.";
+      exit 1;
+    }
+
+deploy-to-github:
+  stage: deploy
+  image: iffregistry.fz-juelich.de/docker-images/gr-build-images/deploy
+  variables:
+    GIT_STRATEGY: none
+  only:
+  - master@Scientific-IT-Systems/administration/gitlab-artifact-cleanup
+  - develop@Scientific-IT-Systems/administration/gitlab-artifact-cleanup
+  - tags@Scientific-IT-Systems/administration/gitlab-artifact-cleanup
+  script:
+  - mkdir --mode=700 ~/.ssh/
+  - (umask 0377 && echo "${GITHUB_DEPLOY_KEY}" > ~/.ssh/id_rsa
+                && echo "github.com ${GITHUB_HOST_KEY}" >> ~/.ssh/known_hosts)
+  - git clone --mirror "${CI_REPOSITORY_URL}" "${CI_PROJECT_NAME}_mirror"
+  - cd "${CI_PROJECT_NAME}_mirror";
+    git push --mirror "git@github.com:sciapp/${CI_PROJECT_NAME}.git";
+    cd ..
+
+deploy-to-pypi:
+  stage: deploy
+  image: python:3-slim
+  only:
+  - tags@Scientific-IT-Systems/administration/gitlab-artifact-cleanup
+  script:
+  - echo "[distutils]"                    > ~/.pypirc;
+    echo "index-servers ="               >> ~/.pypirc;
+    echo "    pypi"                      >> ~/.pypirc;
+    echo "[pypi]"                        >> ~/.pypirc;
+    echo "username = __token__"          >> ~/.pypirc;
+    echo "password = ${PYPI_DEPLOY_KEY}" >> ~/.pypirc;
+  - pip install build twine
+  - python -m build
+  - python -m twine upload dist/*
+
+deploy-to-aur:
+  stage: deploy-to-aur
+  image: iffregistry.fz-juelich.de/docker-images/gr-build-images/$CI_JOB_NAME
+  only:
+  - tags@Scientific-IT-Systems/administration/gitlab-artifact-cleanup
+  script:
+  - mkdir --mode=700 ~/.ssh/
+  - (umask 0377 && echo "$AUR_PRIVATE_KEY" > ~/.ssh/id_rsa
+                && echo "aur.archlinux.org $AUR_HOST_KEY" >> ~/.ssh/known_hosts)
+  - git clone "ssh://aur@aur.archlinux.org/gitlab-artifact-cleanup.git" "gitlab-artifact-cleanup-aur"
+  - cd "gitlab-artifact-cleanup-aur"
+  - sed -i -e "/^pkgver=/c\pkgver=\"${CI_COMMIT_TAG#v}\"" -e "/^pkgrel=/c\pkgrel=\"1\"" PKGBUILD
+  - (
+      source PKGBUILD;
+      curl -o source -L "${source[0]}";
+      SHA256SUM="$(sha256sum source | awk '{ print $1 }')";
+      sed -i "/^sha256sums=/c\sha256sums=(\"${SHA256SUM}\")" PKGBUILD;
+    )
+  - makepkg --printsrcinfo > .SRCINFO
+  - git commit -a -m "Update to version ${CI_COMMIT_TAG#v}"
+  - git push
