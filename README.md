@@ -13,6 +13,8 @@ cases when this auto-cleanup does not apply:
 - Job artifacts which belong to the latest commit of a branch or to a tag are not deleted.
 - If project pipelines keep failing constantly, all artifacts of the last successful pipeline will be kept.
 - Artifacts that are selected to be kept manually (with the web UI for example) will be kept forever.
+- Only artifacts can be deleted automatically. However, job logs can also grow over time and are never removed by
+  GitLab.
 
 In these cases, artifacts can only be deleted manually in the web UI or with the GitLab API. `gitlab-artifact-cleanup`
 uses the GitLab API and provides a convenient command line tool and a simple Python high-level API to clean up old
